@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "myElasticNetwork": {
+      "commandName": "Project",
+      "commandLineArgs": "c:\\tmp\\testElatixNw",
+      "environmentVariables": {
+        "isManager": "true",
+        "serverPublicIp": "none",
+        "serverName": "core1",
+        "s3BucketName": "myelasticnetworkdata",
+        "s3AccessKey": "z3OlC/6OqinmQ5ls1uhuLJtahJZRhRtYyFKRc/yI",
+        "s3AccessId": "AKIAJRMSWAE74Q4OZNAQ"
+      }
+    }
+  }
+}

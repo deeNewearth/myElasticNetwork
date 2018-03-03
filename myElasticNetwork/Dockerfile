@@ -1,14 +1,8 @@
-FROM microsoft/dotnet:2.0-runtime
+FROM microsoft/aspnetcore
 MAINTAINER shree dee <dee@labizbille.com>
 
-ENV isManager false
-ENV serverName none
-ENV serverPublicIp none
-ENV s3BucketName none
-ENV s3AccessKey none
-ENV s3AccessId none
-ENV serverPrivateIp none
-
+ENV webPort 8051
+ENV confLocation /etc/tinc
 
 # Remove SUID programs
 RUN for i in `find / -perm +6000 -type f 2>/dev/null`; do chmod a-s $i; done
@@ -19,7 +13,7 @@ RUN echo "deb http://http.debian.net/debian experimental main" >> /etc/apt/sourc
     DEBIAN_FRONTEND=noninteractive apt-get install -y -t experimental tinc && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-EXPOSE 655/tcp 655/udp
+EXPOSE 655/tcp 655/udp 8051/tcp
 VOLUME /etc/tinc
 
 WORKDIR /app

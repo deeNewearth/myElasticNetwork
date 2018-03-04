@@ -16,18 +16,15 @@ using System.Net;
 
 namespace myElasticNetwork
 {
+    public class DisplayableException : Exception
+    {
+        public DisplayableException(string message, Exception inner = null)
+            : base(message, inner) { }
+    }
+
     public static class Program
     {
         internal static TincHandler _tincHandler = null;
-
-        public static void RecycleTincProcess()
-        {
-            Console.WriteLine("reloading Tinc");
-
-            //since dockecr process waits on tinc working and we set the contaner to start if stopped.
-            //we simply stop this so it refreshes
-            _tincHandler.readConfigAndStart(true);
-        }
 
         
         public static int Main(string[] args)
@@ -94,7 +91,7 @@ namespace myElasticNetwork
         }
     }
 
-    public class Startup
+    public partial class Startup
     {
         public Startup(IConfiguration configuration)
         {
@@ -107,24 +104,65 @@ namespace myElasticNetwork
         {
             app.Run(context =>
             {
-                object ret = "not found";
+                object ret = new { error = "not found" };
+                
 
-                switch (context.Request.Path.Value.ToLowerInvariant().TrimStart('/'))
+                
+                context.Response.ContentType = "application/json";
+
+                try
                 {
-                    case "configchanged":
-                        Console.WriteLine("got change request");
-                        Program.RecycleTincProcess();
-                        ret = new { done=true};
-                        break;
-                    default:
-                        context.Response.StatusCode = 404;
-                        break;
+
+                    switch (context.Request.Path.Value.ToLowerInvariant().TrimStart('/'))
+                    {
+                        case "configchanged":
+                            Console.WriteLine("got change request");
+                            Console.WriteLine("reloading Tinc");
+
+                            //since dockecr process waits on tinc working and we set the contaner to start if stopped.
+                            //we simply stop this so it refreshes
+                            Program._tincHandler.readConfigAndStart(true);
+
+                            ret = new { done = true };
+                            break;
+
+                        case "version":
+                            ret = new { version = typeof(Program).Assembly.GetName().Version.ToString() };
+                            break;
+
+                        case "cloudinit":
+                            ret = handleCloudInit(context.Request);
+                            context.Response.ContentType = "text/plain";
+                            break;
+
+                        case "cloudinitform":
+                            ret = handleCloudTemplate(context.Request);
+                            context.Response.ContentType = "text/html";
+                            break;
+
+                        default:
+                            context.Response.StatusCode = 404;
+                            break;
+                    }
+                }
+                catch (DisplayableException ex)
+                {
+                    ex.PrintDetails("failed");
+                    context.Response.StatusCode = 400;
+                    ret = new { error = $"failed cloudInit: {ex.Message}" };
+                }
+                catch (Exception ex)
+                {
+                    ex.PrintDetails("failed");
+                    context.Response.StatusCode = 500;
+                    ret = new { error = $"failed cloudInit" };
                 }
 
 
-                context.Response.ContentType = "application/json";
+                
 
-                return context.Response.WriteAsync(JsonConvert.SerializeObject(ret));
+                return context.Response.WriteAsync("application/json" == context.Response.ContentType ? 
+                                                            JsonConvert.SerializeObject(ret):ret.ToString());
             });
         }
     }

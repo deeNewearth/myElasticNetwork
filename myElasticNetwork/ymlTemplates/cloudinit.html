@@ -1,0 +1,42 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>myElasticNetwork Cloud init</title>
+    <style>
+        .toreplace {
+            min-width:300px;
+            margin-bottom:20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Cloud Init generator</h2>
+    <form id="theForm">
+        <input class="toreplace" type="text"/>
+
+        <p>
+           <button type="submit">Get init url</button>
+        </p>
+    </form>
+
+    <script
+  src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+  integrity="sha256-3edrmyuQ0w65f8gfBsqowzjJe2iM6n0nKciPUp8y+7E="
+  crossorigin="anonymous"></script>
+
+
+    <script>
+        $(document).ready(function () {
+
+            $("#theForm").submit(function (e) {
+                e.preventDefault();
+                var queryString = $('#theForm').serialize();
+                window.location = '/cloudinit?' + queryString;
+            });
+
+        });
+    </script>
+</body>
+</html>

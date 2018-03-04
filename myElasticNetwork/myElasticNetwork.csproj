@@ -7,6 +7,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="ymlTemplates\cloud-config-coreos.yml" />
+    <None Remove="ymlTemplates\cloudinit.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ymlTemplates\cloud-config-coreos.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="ymlTemplates\cloudinit.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="coreOSFIles\registrycert\" />
     <Folder Include="coreOSFIles\testWeb\" />
   </ItemGroup>

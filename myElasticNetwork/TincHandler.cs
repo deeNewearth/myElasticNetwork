@@ -245,6 +245,13 @@ namespace myElasticNetwork
                 //https://www.tinc-vpn.org/documentation-1.1/tinc-commands.html
 
                 var initCmd = $"start -D " + string.Join(' ',_tincARgs);
+
+
+                if (!String.IsNullOrWhiteSpace(_config.tincExtraParams))
+                {
+                    initCmd += (" " + _config.tincExtraParams);
+                }
+
                 if(restart)
                     initCmd = "restart";
 
@@ -349,6 +356,14 @@ namespace myElasticNetwork
                 _confLocation = envVariables["confLocation"].ToString();
 
             var fullSettingsPath = Path.GetFullPath(Path.Combine(_confLocation,"appsettings.json"));
+            Console.WriteLine($"setting path {fullSettingsPath}");
+
+            var overrideSettingsPath = Path.GetFullPath(Path.Combine(_confLocation, "appsettings.override.json"));
+            if (File.Exists(overrideSettingsPath))
+            {
+                Console.WriteLine("setting override exists using override ");
+                fullSettingsPath = overrideSettingsPath;
+            }
 
             Console.WriteLine($"reading appsettings from {fullSettingsPath}");
 

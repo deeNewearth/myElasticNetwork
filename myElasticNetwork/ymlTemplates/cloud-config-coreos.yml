@@ -1,0 +1,75 @@
+﻿#cloud-config
+
+coreos:
+  etcd2:
+    name: $toreplace_servername$
+    discovery: https://discovery.etcd.io/$toreplace_token$
+    advertise-client-urls: http://$toreplace_tinc_ipv4$:2379,http://$toreplace_tinc_ipv4$:4001
+    initial-advertise-peer-urls: http://$toreplace_tinc_ipv4$:2380
+    # listen on the official ports 2379, 2380 and one legacy port 4001:
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://$toreplace_tinc_ipv4$:2380
+  fleet:
+    etcd_servers: http://$toreplace_tinc_ipv4$:4001
+    public-ip: $toreplace_tinc_ipv4$   # used for fleetctl ssh command
+  units:
+    - name: etcd2.service
+      command: start
+    - name: fleet.service
+      command: start
+    # enable and start iptables-restore
+    - name: iptables-restore.service
+      enable: true
+      command: start
+
+    # Our elastic network
+    #change the servername to fit our server naming convetion, and AWS information
+    - name: docker-bizElasticNetwork.service
+      command: start
+      content: |
+        [Unit]
+        Description=Labizbille distributed elastic service
+        After=docker.service
+
+        [Service]
+        Restart=always
+        ExecStartPre=-/usr/bin/docker rm bizElasticNetwork
+        ExecStart=/usr/bin/docker run --rm --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc   --name bizElasticNetwork labizbille/elasticnetwork
+        ExecStop=/usr/bin/docker stop -t 2 bizElasticNetwork
+
+write_files:
+  # lock eth1 down:
+  - path: /var/lib/iptables/rules-save
+    permissions: 0644
+    content: |
+      *filter
+      :INPUT DROP [0:0]
+      :FORWARD DROP [0:0]
+      :OUTPUT ACCEPT [0:0]
+      -A INPUT -i lo -j ACCEPT
+      -A INPUT -i tun0 -j ACCEPT
+      -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 22 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 80 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 8051 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 655 -j ACCEPT
+      -A INPUT -i eth0 -p udp -m udp --dport 655 -j ACCEPT
+      -A INPUT -d $public_ipv4/32 -p icmp -m icmp --icmp-type 8 -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
+      COMMIT
+
+  # bizElasticNetwork appsettings
+  - path: /srv/tinc/appsettings.json
+    permissions: 0644
+    owner: root
+    content: |
+      {
+      "serverPublicIp":"$public_ipv4",
+      "serverName": "$toreplace_servername$",
+      "serverPrivateIp": "$toreplace_tinc_ipv4$",
+      "s3BucketName": "$toreplace_BucketName$",
+      "s3AccessKey": "$toreplace_accesskey$",
+      "s3AccessId": "$toreplace_accessid$"
+      }
+
+
+  

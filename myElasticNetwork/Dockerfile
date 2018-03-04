@@ -18,7 +18,7 @@ VOLUME /etc/tinc
 
 WORKDIR /app
 
-COPY bin/Release/PublishOutput/* ./
+COPY bin/Release/PublishOutput ./
 #COPY PublishOutput/* ./
 
 ENTRYPOINT ["dotnet", "myElasticNetwork.dll"]

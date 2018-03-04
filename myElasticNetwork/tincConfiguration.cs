@@ -16,5 +16,11 @@ namespace myElasticNetwork
         public string s3AccessKey { get; set; }
 
         public string tincExecutable { get; set; }
+
+        /// <summary>
+        /// is used mainly to turn on the -d3 flag for debugging. It's needed cause we run this container with start always 
+        /// so imposibe to update it for tests
+        /// </summary>
+        public string tincExtraParams { get; set; }
     }
 }

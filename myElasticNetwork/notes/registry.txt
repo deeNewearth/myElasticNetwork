@@ -1,0 +1,8 @@
+﻿docker run -i -t --rm   --network  mysqlcluster_net alpine /bin/sh
+
+apk --no-cache add curl 
+
+curl 'http://172.17.0.1:2379/v2/keys/'
+
+curl 'http://swarmman_internal.labizbille.com:2379/v2/keys/'
+

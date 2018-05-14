@@ -1,0 +1,262 @@
+#cloud-config
+
+hostname: corelinode1
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEA79S+rYLY2NDt6tEA2RpJBt+u6KtV5KtqLociBWKihA9pHRYgDPcmWZxYDUKfaHFmBIiCLoDUjSkFX2I1MqPPHbA5JBnRhH1dtjcMoIN9ZpQUSoXziDKZo/gg6e8+bxqQvaJ1vuvJnOhegQX0/f97yF0OUg2nooWp4V43Qt+fwNo71zto5MdsXwwdQXiiT7OvW+B6E/ToulVr9LOgGhPQbY8OJo+oUAcp5GqW70ULKr466/ZD7Rh1wyTzLCelyFTCfEaUDT2cM6sRY4RrlUyFEwNXtOyf5/aSmLTLJdGRA06204rwMFHWNut00W9tAFdS1dC7R7NEHLi4TDR3Pbq7Ow== rsa-key-20180226
+
+coreos:
+
+  units:
+    - name: etcd-member.service
+      enable: true
+      command: start
+      drop-ins:
+        - name: 40-etcd-cluster.conf
+          content: |
+            [Service]
+            Environment="ETCD_IMAGE_TAG=v2.1.3"
+            Environment="ETCD_NAME=corelinode1"
+            Environment="ETCD_ADVERTISE_CLIENT_URLS=http://10.62.42.1:2379"
+            Environment="ETCD_INITIAL_ADVERTISE_PEER_URLS=http://10.62.42.1:2380"
+            Environment="ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379"
+            Environment="ETCD_LISTEN_PEER_URLS=http://10.62.42.1:2380"
+            Environment="ETCD_INITIAL_CLUSTER=digitalocean1=http://10.62.42.3:2380,corelinode1=http://10.62.42.1:2380"
+            Environment="ETCD_INITIAL_CLUSTER_STATE=existing"
+
+    # enable and start iptables-restore
+    - name: iptables-restore.service
+      enable: true
+      command: start
+
+    # Our elastic network
+    #change the servername to fit our server naming convetion, and AWS information
+    - name: docker-bizElasticNetwork.service
+      command: start
+      content: |
+        [Unit]
+        Description=Labizbille distributed elastic service
+        After=docker.service
+
+        [Service]
+        Restart=always
+        ExecStartPre=-/usr/bin/docker rm bizElasticNetwork
+        ExecStart=/usr/bin/docker run --rm --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc   --name bizElasticNetwork labizbille/elasticnetwork
+        ExecStop=/usr/bin/docker stop -t 2 bizElasticNetwork
+
+    # Our private registry service
+    - name: docker-bizregistry.service
+      command: start
+      content: |
+        [Unit]
+        Description=Labizbille registry service
+        After=docker-bizElasticNetwork.service
+
+        [Service]
+        Restart=always
+        RestartSec=20
+        ExecStartPre=-/usr/bin/docker rm myregistry
+        ExecStart=/usr/bin/docker run --rm --volume /srv/registry:/certs --volume /srv/registry/config.yml:/etc/docker/registry/config.yml -p 10.62.42.1:5000:5000 --name myregistry registry:2
+        ExecStop=/usr/bin/docker stop -t 5 myregistry
+
+write_files:
+    # 8051:elastic network status, tun0 to eth0 so that docker containers can acces etcd2
+  - path: /var/lib/iptables/rules-save
+    permissions: 0644
+    content: |
+      *filter
+      :INPUT DROP [0:0]
+      :FORWARD DROP [0:0]
+      :OUTPUT ACCEPT [0:0]
+      -A INPUT -i lo -j ACCEPT
+      -A INPUT -i tun0 -j ACCEPT
+      -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 22 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 80 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 8051 -j ACCEPT
+      -A INPUT -i eth0 -p tcp -m tcp --dport 655 -j ACCEPT
+      -A INPUT -i eth0 -p udp -m udp --dport 655 -j ACCEPT
+      -A INPUT -d 45.33.42.28/32 -p icmp -m icmp --icmp-type 8 -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT
+      -A FORWARD -i tun0 -o eth0 -j ACCEPT
+      COMMIT
+
+  # bizElasticNetwork appsettings
+  - path: /srv/tinc/appsettings.json
+    permissions: 0644
+    owner: root
+    content: |
+      {
+      "serverPublicIp":"45.33.42.28",
+      "serverName": "corelinode1",
+      "serverPrivateIp": "10.62.42.1",
+      "s3BucketName": "myelasticnetworkdata",
+      "s3AccessKey": "B+u5MHqKOMxyUoonfBhBLq1T69FciqWyGHJ9hiC+",
+      "s3AccessId": "AKIAIWIYQODNHJELAYMQ"
+      }
+
+  # registry files
+  - path: /etc/docker/certs.d/myswarmregistry.labizbille.com:5000/ca.crt
+    permissions: 0644
+    owner: root
+    content: |
+        -----BEGIN CERTIFICATE-----
+        MIIFrzCCA5egAwIBAgIJAP7/KYY4ilY/MA0GCSqGSIb3DQEBCwUAMG4xCzAJBgNV
+        BAYTAlVTMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+        aWRnaXRzIFB0eSBMdGQxJzAlBgNVBAMMHm15c3dhcm1yZWdpc3RyeS5sYWJpemJp
+        bGxlLmNvbTAeFw0xODAzMTQwNTA0MzlaFw0xOTAzMTQwNTA0MzlaMG4xCzAJBgNV
+        BAYTAlVTMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+        aWRnaXRzIFB0eSBMdGQxJzAlBgNVBAMMHm15c3dhcm1yZWdpc3RyeS5sYWJpemJp
+        bGxlLmNvbTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAL3Au5lefVpJ
+        HP97eyF4lIKvbo4URe49/bOOJEw8rVgu8x3tLQErQ62U6JfHwYfOOW55F7UhN3h0
+        UgybWep/U31Kugc2vuICyLVJffYQYpqqx7pEO7cMeVjNtmB9E9qx4QaKxcZLOhkI
+        /F0pxfORnfghXiN9NNzi9M6dBIrPnu2G4/R0GsdY2KJrGis+yNrHs97SqIp8vQVc
+        CyFapJZCVvdPUNxgAjv4O6+FEJwn42MOTGcoHyhkwIiS48+a6Bq1eAELB24JLnHU
+        m6sYma+GyrkXwMeV2050UFoJV3Lap5rQmbOCPcz/uIEfQTrMbwhPcVmQDMH/AnbT
+        CLIfoAR0oY3/HhY8RuARa5PMGKDFrAyKZf0Uo6BKdmRkpsWKk0wmF3p0xNonQ4de
+        jWt4vKehAaDGEoGxAQqV7fwJpx4SdCKiWFwz6vw2l3T02W3W1SVmko3qQqo6dTsq
+        Qmw/8HxXIQ5U7KXBsK1fUTmG87RBH3mCnN54nhuhoo/mqAjh6MIC3U8RacnJYYpn
+        ZaDw1zdjPkAb/+lpXQinyqk+5K5uaJGxCBFBG4GzJMa7YModmgWXekBSVCxAfJ5v
+        lQwGhvS0NsX0o6y0hPKadQ9XHJs0ru8lLzwRlyK4eE8PsTaJAmJ9gAXwMdA4L013
+        xYo+Vb7QRNBlpGkKvC0bln04ixfZHnOnAgMBAAGjUDBOMB0GA1UdDgQWBBSiLgAS
+        ZRyItqzmUqQp5/1ncbccbDAfBgNVHSMEGDAWgBSiLgASZRyItqzmUqQp5/1ncbcc
+        bDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQBWo1CeGGjsEFbdygNC
+        leWlreCvoKXLuHnaGTwpcuk8QnUq/iPjtO25uQQ+853UQSJjZaC0IBZlv8ZK7ND+
+        drx2FZEyfZIDGsXMyG5LIOfsrMjqgaRs6rV6JxzZytUCnrlr2AOEqbmsnD/g7bP4
+        gQBtl3yPYrjMnaS0ty+yU83CLa8FZzxALc4KPuY0FIjjIF9b4zdBSwP/DNhN/doN
+        yJo8aW530b4u4PTTOnEWkiioFy7PIcRELa9SjOyeCfcogsyAS2mR6cE/bSemrJV9
+        caH4WdWbKUmfHsOWNYxKPXwh3aecr7V91VLNPmjzYndxModqQaBej2D0ATc9BLir
+        ynu25odeNrIk6b1BBXKZgBluf/eisDLUNLngLOstP6vReLNfFV/dmE7cRtdiaCKo
+        98xMxk5LReK5i0qWsnFp93t3eeur3sCrPUSwrYiJNT8DgqCg9Ljy88iyBBY3EUff
+        uvsTFOUneW9sRG/3Prvm1yCxchjfuFG265NlXH99WQ5L/UQBD3mkojGFDrgKqg1v
+        ae968nSZR+co+Z22d3GRHOE9cFZpSyQsYn6r97zdF4+r/DRmZPq8koZ4PxOAov2E
+        IlETxYlZ8bKOlD62gzVHmkdhpb6i29pIsMTY2ksdJ4UChoMf/o5foM0Ov/KvMV1e
+        xYsgGmbkrDgJ/rA0pEMQdfATvA==
+        -----END CERTIFICATE-----
+
+
+  - path: /srv/registry/config.yml
+    permissions: 0644
+    owner: root
+    content: |
+        version: 0.1
+        log:
+          fields:
+            service: registry
+        storage:
+          s3:
+            accesskey: AKIAIX4JZWM5JVF32UOQ
+            secretkey: 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
+            bucket: myelasticnetworkdata
+            region: us-west-2
+            rootdirectory: /myregistry
+          cache:
+            blobdescriptor: inmemory
+        http:
+          addr: 0.0.0.0:5000
+          secret: Hyjhjshhsssuujjhjhkksllkkwioiwoikjkjdggj7878
+          tls:
+            certificate: /certs/registry.crt
+            key: /certs/registry.key
+          headers:
+            X-Content-Type-Options: [nosniff]
+        health:
+          storagedriver:
+            enabled: true
+            interval: 10s
+            threshold: 3
+
+  - path: /srv/registry/registry.crt
+    permissions: 0644
+    owner: root
+    content: |
+        -----BEGIN CERTIFICATE-----
+        MIIFrzCCA5egAwIBAgIJAP7/KYY4ilY/MA0GCSqGSIb3DQEBCwUAMG4xCzAJBgNV
+        BAYTAlVTMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+        aWRnaXRzIFB0eSBMdGQxJzAlBgNVBAMMHm15c3dhcm1yZWdpc3RyeS5sYWJpemJp
+        bGxlLmNvbTAeFw0xODAzMTQwNTA0MzlaFw0xOTAzMTQwNTA0MzlaMG4xCzAJBgNV
+        BAYTAlVTMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+        aWRnaXRzIFB0eSBMdGQxJzAlBgNVBAMMHm15c3dhcm1yZWdpc3RyeS5sYWJpemJp
+        bGxlLmNvbTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAL3Au5lefVpJ
+        HP97eyF4lIKvbo4URe49/bOOJEw8rVgu8x3tLQErQ62U6JfHwYfOOW55F7UhN3h0
+        UgybWep/U31Kugc2vuICyLVJffYQYpqqx7pEO7cMeVjNtmB9E9qx4QaKxcZLOhkI
+        /F0pxfORnfghXiN9NNzi9M6dBIrPnu2G4/R0GsdY2KJrGis+yNrHs97SqIp8vQVc
+        CyFapJZCVvdPUNxgAjv4O6+FEJwn42MOTGcoHyhkwIiS48+a6Bq1eAELB24JLnHU
+        m6sYma+GyrkXwMeV2050UFoJV3Lap5rQmbOCPcz/uIEfQTrMbwhPcVmQDMH/AnbT
+        CLIfoAR0oY3/HhY8RuARa5PMGKDFrAyKZf0Uo6BKdmRkpsWKk0wmF3p0xNonQ4de
+        jWt4vKehAaDGEoGxAQqV7fwJpx4SdCKiWFwz6vw2l3T02W3W1SVmko3qQqo6dTsq
+        Qmw/8HxXIQ5U7KXBsK1fUTmG87RBH3mCnN54nhuhoo/mqAjh6MIC3U8RacnJYYpn
+        ZaDw1zdjPkAb/+lpXQinyqk+5K5uaJGxCBFBG4GzJMa7YModmgWXekBSVCxAfJ5v
+        lQwGhvS0NsX0o6y0hPKadQ9XHJs0ru8lLzwRlyK4eE8PsTaJAmJ9gAXwMdA4L013
+        xYo+Vb7QRNBlpGkKvC0bln04ixfZHnOnAgMBAAGjUDBOMB0GA1UdDgQWBBSiLgAS
+        ZRyItqzmUqQp5/1ncbccbDAfBgNVHSMEGDAWgBSiLgASZRyItqzmUqQp5/1ncbcc
+        bDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQBWo1CeGGjsEFbdygNC
+        leWlreCvoKXLuHnaGTwpcuk8QnUq/iPjtO25uQQ+853UQSJjZaC0IBZlv8ZK7ND+
+        drx2FZEyfZIDGsXMyG5LIOfsrMjqgaRs6rV6JxzZytUCnrlr2AOEqbmsnD/g7bP4
+        gQBtl3yPYrjMnaS0ty+yU83CLa8FZzxALc4KPuY0FIjjIF9b4zdBSwP/DNhN/doN
+        yJo8aW530b4u4PTTOnEWkiioFy7PIcRELa9SjOyeCfcogsyAS2mR6cE/bSemrJV9
+        caH4WdWbKUmfHsOWNYxKPXwh3aecr7V91VLNPmjzYndxModqQaBej2D0ATc9BLir
+        ynu25odeNrIk6b1BBXKZgBluf/eisDLUNLngLOstP6vReLNfFV/dmE7cRtdiaCKo
+        98xMxk5LReK5i0qWsnFp93t3eeur3sCrPUSwrYiJNT8DgqCg9Ljy88iyBBY3EUff
+        uvsTFOUneW9sRG/3Prvm1yCxchjfuFG265NlXH99WQ5L/UQBD3mkojGFDrgKqg1v
+        ae968nSZR+co+Z22d3GRHOE9cFZpSyQsYn6r97zdF4+r/DRmZPq8koZ4PxOAov2E
+        IlETxYlZ8bKOlD62gzVHmkdhpb6i29pIsMTY2ksdJ4UChoMf/o5foM0Ov/KvMV1e
+        xYsgGmbkrDgJ/rA0pEMQdfATvA==
+        -----END CERTIFICATE-----
+
+
+  - path: /srv/registry/registry.key
+    permissions: 0644
+    owner: root
+    content: |
+        -----BEGIN PRIVATE KEY-----
+        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
+        j1VdCD8ectzCY2hOOBg+Zx8gJLFk+5rJ
+        -----END PRIVATE KEY-----
+

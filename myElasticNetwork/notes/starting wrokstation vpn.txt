@@ -1,0 +1,19 @@
+﻿https://nwgat.ninja/quick-easy-tinc-vpn-between-windows-systems/
+
+
+to setup static ip. in admin command prompt
+C:\Program Files\tinc
+
+netsh interface ipv4 show interfaces
+
+netsh interface set interface name = "Ethernet 2" newname = "tinc"
+netsh interface ip set address "tinc" static 10.62.42.XX  255.255.255.0
+
+netsh interface ipv4 show config
+
+to start vpn  (d3 for debug log)
+tincd -n vpn -D -d3
+
+
+to check from another command prompt 
+ping 10.62.42.2

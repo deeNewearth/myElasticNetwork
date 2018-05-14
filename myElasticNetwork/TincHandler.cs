@@ -217,7 +217,8 @@ namespace myElasticNetwork
                 var tincupfile = Path.Combine(_confLocation, "tinc-up");
                 Console.WriteLine($"creating file {tincupfile}");
 
-                var fileText = new[] { "#!/bin/sh", $"ifconfig $INTERFACE {_config.serverPrivateIp} netmask 255.255.255.0" };
+                //tinc broke after 1688.5.3 now it needs a delay after creating the TUN device 
+                var fileText = new[] { "#!/bin/sh", "sleep 0.1", $"ifconfig $INTERFACE {_config.serverPrivateIp} netmask 255.255.255.0" };
                 File.WriteAllLines(tincupfile, fileText);
                 Console.WriteLine($"done with {tincupfile}");
             }

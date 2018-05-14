@@ -1,0 +1,7 @@
+﻿https://www.digitalocean.com/community/tutorials/how-to-run-nginx-in-a-docker-container-on-ubuntu-14-04
+
+https://blog.codeship.com/nginx-reverse-proxy-docker-swarm-clusters/note
+
+https://www.liaohuqiu.net/posts/nginx-proxy-pass/
+
+https://blog.codeship.com/nginx-reverse-proxy-docker-swarm-clusters/

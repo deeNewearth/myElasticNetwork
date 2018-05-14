@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <Folder Include="coreOSFIles\registrycert\" />
-    <Folder Include="coreOSFIles\testWeb\" />
   </ItemGroup>
 
   <ItemGroup>

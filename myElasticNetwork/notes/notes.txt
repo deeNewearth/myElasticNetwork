@@ -1,0 +1,216 @@
+﻿installing tinc:
+trying https://github.com/JensErat/docker-tinc
+
+
+linux hosts:
+digiocean1 (159.65.96.18)
+
+docker run   --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc     jenserat/tinc init digiocean1
+
+ls /srv/tinc
+
+create root password so that i can use winscp and change configuration. didn't work
+
+following https://www.digitalocean.com/community/tutorials/how-to-install-tinc-and-set-up-a-basic-vpn-on-ubuntu-14-04
+
+ sudo vi  /srv/tinc/tinc.conf
+
+ sudo vi /srv/tinc/hosts/digiocean1
+
+ sudo vi /srv/tinc/tinc-up
+ sudo vi /srv/tinc/tinc-down
+ sudo chmod 755 /srv/tinc/tinc-*
+
+ for core in NAT
+ docker run   --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc     jenserat/tinc init core2
+ printf "Name = core2\nAddressFamily = ipv4\nInterface = tun0\nConnectTo = digitalocean1\n" | sudo tee  /srv/tinc/tinc.conf
+ sudo mv /srv/tinc/hosts/core2 /srv/tinc/hosts/core2.tmp
+ printf 'Subnet = 10.0.0.3/32\n' | sudo tee  /srv/tinc/hosts/core2
+ cat /srv/tinc/hosts/core2.tmp | sudo tee -a /srv/tinc/hosts/core2
+ sudo rm /srv/tinc/hosts/core2.tmp
+ 
+ 
+
+ sudo vi /srv/tinc/hosts/core1
+
+ printf 'ifconfig $INTERFACE 10.0.0.3 netmask 255.255.255.0\n' | sudo tee -a /srv/tinc/tinc-up
+ 
+ //don't need tinc down
+
+
+ sudo vi /srv/tinc/tinc-up
+ sudo vi /srv/tinc/tinc-down
+
+
+
+ docker run  -d  --net=host  --name tinc   --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc  --restart  unless-stopped  jenserat/tinc start -D 
+
+ for dedug
+ docker run  -it  --net=host  --name tinc   --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc  --restart  unless-stopped  jenserat/tinc start -D -d3
+
+ with my code
+ docker run -d -e "serverName=core4" -e "s3BucketName=myelasticnetworkdata" -e "s3AccessKey=z3OlC/6OqinmQ5ls1uhuLJtahJZRhRtYyFKRc/yI" -e "s3AccessId=AKIAJRMSWAE74Q4OZNAQ"    --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc   --name bizElasticNetwork labizbille/elasticnetwork
+ docker run -it --net=host     --device=/dev/net/tun     --cap-add NET_ADMIN     --volume /srv/tinc:/etc/tinc   --name bizElasticNetwork labizbille/elasticnetwork
+
+ createing web service
+ https://maori.geek.nz/the-smallest-docker-web-service-that-could-412ce93fccdd
+ python by defaults listens on port 8000 , so change expose to 8000
+
+ docker build -t python/server .
+
+ //for interactive
+  docker run -i -t --name testweb  -p 8000:8000 python/server
+
+  //for detached
+   docker run -d --name testweb  -p 8000:8000 python/server
+
+   //doing swarm
+   on linode1
+    docker swarm init --advertise-addr 10.62.42.1
+
+
+
+    docker swarm join --token SWMTKN-1-3nwrp8kxls0uiu4yoxuutuvcog4zkbxlifa8rhob27ydnii97n-dbniqe4ykhp25awjm6xmbhec0 10.0.0.1:2377
+
+
+	docker service create --replicas 2 --name myCoolService python/server
+//not on node as we need a registry
+
+	creating the registry
+	following : https://docs.docker.com/engine/swarm/stack-deploy/#test-the-app-with-compose
+	 docker service create --name registry --publish published=5000,target=5000 registry:2
+
+	 //got to create a self sogned registry  so following https://codeblog.dotsandbrackets.com/private-registry-swarm/
+
+openssl req -newkey rsa:4096 -nodes -sha256   -keyout registry.key -x509 -days 365   -out registry.crt
+make sure to enter myswarmregistry.labizbille.com for commonname
+
+sudo mkdir -p /etc/docker/certs.d
+sudo mkdir -p /etc/docker/certs.d/myswarmregistry.labizbille.com:5000
+sudo cp ./registry.crt /etc/docker/certs.d/myswarmregistry.labizbille.com:5000/ca.crt
+
+
+docker service create --name registry --publish=5000:5000 \
+ --constraint=node.role==manager \
+ --mount=type=bind,src=/home/core,dst=/certs \
+ -e REGISTRY_HTTP_ADDR=0.0.0.0:5000 \
+ -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt \
+ -e REGISTRY_HTTP_TLS_KEY=/certs/registry.key \
+ registry:latest
+
+ docker service create --name registry --publish=5000:5000 \
+ --constraint=node.hostname==coreos-s-1vcpu-2gb-sfo2-01 \
+ --mount=type=bind,src=/home/core,dst=/certs \
+ -e REGISTRY_HTTP_ADDR=0.0.0.0:5000 \
+ -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt \
+ -e REGISTRY_HTTP_TLS_KEY=/certs/registry.key \
+ registry:latest
+
+ 
+
+ https://stackoverflow.com/questions/31788256/how-to-pull-from-private-docker-repository-on-docker-hub
+ https://stackoverflow.com/questions/27869415/how-to-automate-a-docker-run-from-a-private-dockerhub-repo
+
+ https://blog.platan.us/creating-a-simple-aws-s3-private-docker-registry-1be37a063c5
+
+ docker tag python/server myswarmregistry.labizbille.com:5000/pserver:latest
+
+ docker push myregistry.com:5000/pserver:latest
+
+ docker service create --replicas 2 --name myCrService -p 8000:8000 myregistry.com:5000/pserver:latest
+
+
+
+ creating coreOS clusters:
+ https://www.digitalocean.com/community/tutorials/how-to-set-up-a-coreos-cluster-on-digitalocean
+
+
+
+ securing
+ https://www.jimmycuadra.com/posts/securing-coreos-with-iptables/
+
+ on digital ocean1
+ $ sudo iptables -S
+-P INPUT DROP
+-P FORWARD ACCEPT
+-P OUTPUT ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -i eth1 -j ACCEPT
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -p icmp -m icmp --icmp-type 0 -j ACCEPT
+-A INPUT -p icmp -m icmp --icmp-type 3 -j ACCEPT
+-A INPUT -p icmp -m icmp --icmp-type 11 -j ACCEPT
+-A INPUT -i tun0 -j ACCEPT
+-A INPUT -i eth0 -p tcp -m tcp --dport 8000 -j ACCEPT
+-A INPUT -i eth0 -p tcp -m tcp --dport 655 -j ACCEPT
+-A INPUT -i eth0 -p udp -m udp --dport 655 -j ACCEPT
+-A INPUT -i eth0 -p tcp -m tcp --dport 22 -j ACCEPT
+
+almost forgot this one
+
+
+cloud init
+http://t0t0.github.io/internship%20week%207/2016/03/30/cloud-config-docker.html
+https://www.digitalocean.com/community/tutorials/how-to-set-up-a-coreos-cluster-on-digitalocean
+
+https://coreos.com/validate/
+
+etcd trouble
+
+for logs
+
+journalctl -f -t etcd2
+journalctl -u docker-bizElasticNetwork.service
+
+I see if it's working
+etcdctl cluster-health
+etcdctl member list
+
+etcdctl set /message Hello
+etcdctl get /message
+etcdctl rm /message
+
+
+xenserver: save coreosinstallation
+//https://xen-orchestra.com/blog/docker-support-in-xenserver-the-ultimate-guide/
+
+copy using winScp \\192.168.1.140\share\XenServer-7.3.0-xscontainer to zenserver
+on the zenserver :xe-install-supplemental-pack XenServer-7.3.0-xscontainer.iso
+
+
+on the coreOS VM when it's working
+sudo coreos-install -d /dev/xvda -o xen -C stable
+
+on Linode (WORKS)
+https://linode.com/docs/tools-reference/custom-kernels-distros/install-coreos-on-your-linode/
+
+
+cloud-init locations:
+Linode :  /var/lib/coreos-install/user_data , edits works and  persists
+upcloud: /etc/upcloud_userdata, edits works and  persists
+
+
+updating:
+upcloud core os was old so we did
+sudo update_engine_client -update
+
+
+netmask chart 
+http://www.unixwiz.net/techtips/netmask-ref.html
+
+
+
+
+
+# Delete all stopped containers
+docker ps -q -f status=exited | xargs --no-run-if-empty docker rm
+# Delete all dangling (unused) images
+docker images -q -f dangling=true | xargs --no-run-if-empty docker rmi
+
+docker ps -a -q | % { docker rm $_ }
+docker images -q | % { docker rmi $_ }
+
+
+swarm address
+elasticep1.labizbille.com
+swarmman_internal.labizbille.com

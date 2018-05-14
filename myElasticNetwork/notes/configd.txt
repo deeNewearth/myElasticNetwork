@@ -1,0 +1,1 @@
+﻿http://www.mricho.com/confd-and-docker-separating-config-and-code-for-containers/

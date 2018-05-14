@@ -1,0 +1,35 @@
+﻿
+deploying mysql
+https://www.percona.com/blog/2016/06/10/percona-xtradb-cluster-in-a-multi-host-docker-network/
+https://severalnines.com/blog/mysql-docker-introduction-docker-swarm-mode-and-multi-host-networking
+
+docker network create -d overlay mysqlcluster_net --attachable
+
+//5.6.37 failed to start mysql
+
+docker service create --name mysql-galera --replicas 2  --network mysqlcluster_net --detach=false --env DISCOVERY_SERVICE=swarmman_internal.labizbille.com:2379  \
+--env MYSQL_ROOT_PASSWORD=a3JRlcIJaJ7sPLmkzudG --env XTRABACKUP_PASSWORD=2EEiV1QtHmTzP92MLsJW --env CLUSTER_NAME=galera_test  perconalab/percona-xtradb-cluster:5.6
+
+
+
+curl 'http://swarmman_internal.labizbille.com:2379/v2/keys/'
+verify there is the key pxc-cluster
+
+test with  mysql client
+ docker run -it --rm --network mysqlcluster_net  alpine /bin/sh
+  apk add --no-cache mysql-client
+   mysql -u root -h  mysql-galera -pa3JRlcIJaJ7sPLmkzudG
+
+   NOTE: give it time to boot, you will see refused if you try too fast
+
+
+
+backup and restore
+https://www.percona.com/doc/percona-xtrabackup/2.4/how-tos.html#recipes-for-xtrabackup
+https://www.digitalocean.com/community/tutorials/how-to-create-hot-backups-of-mysql-databases-with-percona-xtrabackup-on-centos-7
+
+https://www.percona.com/blog/2017/03/20/running-percona-xtrabackup-windows-docker/
+
+
+ mkdir /backups
+[root@1835974c07b0 /]# innobackupex --user=xtrabackup --password=2EEiV1QtHmTzP92MLsJW /backups

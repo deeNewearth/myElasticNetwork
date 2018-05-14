@@ -1,0 +1,6 @@
+﻿MAKE sure to update the vesrion in AssemblyInfo.cs
+build and PUBLISH the project
+docker build -t labizbille/elasticnetwork .
+docker tag labizbille/elasticnetwork:latest labizbille/elasticnetwork:v0.0.REPLACE_WITH_NEW_VERSION
+docker push labizbille/elasticnetwork:v0.0.REPLACE_WITH_NEW_VERSION
+docker push labizbille/elasticnetwork:latest
